@@ -2,9 +2,12 @@ use std::{env, io::Error};
 use std::collections::HashMap;
 use std::env::VarError;
 use std::net::{AddrParseError, SocketAddr};
+use std::sync::Arc;
+use std::thread::sleep;
 use futures::executor::block_on;
+use futures::TryFutureExt;
 use nacos_sdk::api::constants;
-use nacos_sdk::api::naming::{NamingServiceBuilder, ServiceInstance};
+use nacos_sdk::api::naming::{NamingService, NamingServiceBuilder, ServiceInstance};
 use nacos_sdk::api::props::ClientProps;
 use tracing::info;
 
@@ -59,6 +62,76 @@ pub struct ServeOptions {
     pub service_name: Option<String>
 }
 
+#[derive(Debug, Clone)]
+pub struct ServiceManager {
+    pub naming_service: Arc<NamingService>,
+    pub service_instance: ServiceInstance,
+    pub service_name: String,
+}
+
+impl ServiceManager {
+    pub fn new(opt: ServeOptions) -> Result<Self,EzError> {
+        let addr = parse_addr(match opt.addr {
+            Some(addr) => addr,
+            None => get_env("NACOS_ADDR")?
+        })?;
+        let namespace = match opt.namespace {
+            Some(namespace) => namespace,
+            None => get_env("NACOS_NAMESPACE")?
+        };
+        let service_addr = parse_addr(match opt.service_addr {
+            Some(service_addr) => parse_addr(service_addr)?,
+            None => get_env("SERVICE_ADDR")?
+        })?;
+        let service_name = match opt.service_name {
+            Some(service_name) => service_name,
+            None => get_env("SERVICE_NAME")?
+        };
+        info!("[NACOS_ADDR]: {}", addr);
+        info!("[NACOS_NAMESPACE]: {}", namespace);
+        info!("[SERVICE_ADDR]: {}", service_addr);
+        info!("[SERVICE_NAME]: {}", service_name);
+        let naming_service = NamingServiceBuilder::new(
+            ClientProps::new().server_addr(addr).namespace(namespace))
+            .build()
+            .map_err(|e| {
+                EzError::Other(format!("NamingService create failed: {}", e))
+            })?;
+        let (host, port) = match service_addr.split_once(":") {
+            Some(value) => value,
+            None => return Err(EzError::Other("Invalid service address".to_string()))
+        };
+        let instance = ServiceInstance{
+            ip: host.to_string(),
+            port: port.parse::<i32>().unwrap(),
+            weight: 1.0,
+            healthy: true,
+            enabled: true,
+            ephemeral: true,
+            metadata: HashMap::from([(META_GRPC_PORT.to_string(), port.to_string())]),
+            ..Default::default()
+        };
+        Ok(Self{
+            naming_service: Arc::new(naming_service),
+            service_instance: instance,
+            service_name,
+        })
+    }
+
+    pub fn online(&self) -> Result<(),EzError> {
+        block_on(self.naming_service.register_instance(self.service_name.clone(), Some(constants::DEFAULT_GROUP.to_string()), self.service_instance.clone()))
+            .map_err(|e| EzError::Other(format!("Service online error: {}", e.to_string())))?;
+        info!("Service online successfully");
+        Ok(())
+    }
+    pub fn offline(&self) -> Result<(), EzError> {
+        block_on(self.naming_service.deregister_instance(self.service_name.clone(), Some(constants::DEFAULT_GROUP.to_string()), self.service_instance.clone())
+            .map_err(|e| EzError::Other(format!("Service offline error: {}", e.to_string()))))?;
+        info!("Service offline successfully");
+        Ok(())
+    }
+}
+
 impl Default for ServeOptions {
     fn default() -> Self {
         Self{
@@ -69,61 +142,6 @@ impl Default for ServeOptions {
         }
     }
 }
-
-
-/// Service online
-pub fn online(opt: ServeOptions) -> Result<(), EzError>{
-    let addr = parse_addr(match opt.addr {
-        Some(addr) => addr,
-        None => get_env("NACOS_ADDR")?
-    })?;
-    let namespace = match opt.namespace {
-        Some(namespace) => namespace,
-        None => get_env("NACOS_NAMESPACE")?
-    };
-    let service_addr = parse_addr(match opt.service_addr {
-        Some(service_addr) => parse_addr(service_addr)?,
-        None => get_env("SERVICE_ADDR")?
-    })?;
-    let service_name = match opt.service_name {
-        Some(service_name) => service_name,
-        None => get_env("SERVICE_NAME")?
-    };
-    info!("[NACOS_ADDR]: {}", addr);
-    info!("[NACOS_NAMESPACE]: {}", namespace);
-    info!("[SERVICE_ADDR]: {}", service_addr);
-    info!("[SERVICE_NAME]: {}", service_name);
-    let naming_service = NamingServiceBuilder::new(
-        ClientProps::new().server_addr(addr).namespace(namespace))
-        .build()
-        .map_err(|e| {
-            EzError::Other(format!("NamingService create failed: {}", e))
-        })?;
-    let (host, port) = match service_addr.split_once(":") {
-        Some(value) => value,
-        None => return Err(EzError::Other("Invalid service address".to_string()))
-    };
-    let instance = ServiceInstance{
-        ip: host.to_string(),
-        port: port.parse::<i32>().unwrap(),
-        weight: 1.0,
-        healthy: true,
-        enabled: true,
-        ephemeral: true,
-        metadata: HashMap::from([(META_GRPC_PORT.to_string(), port.to_string())]),
-        ..Default::default()
-    };
-    block_on(naming_service.register_instance(service_name, Some(constants::DEFAULT_GROUP.to_string()), instance))
-        .map_err(|e| EzError::Other(format!("register service error: {}", e.to_string())))?;
-    info!("Service online successfully");
-    Ok(())
-}
-
-/// Service offline
-/// TODO
-pub fn offline(){
-}
-
 
 fn get_env(name: &str) -> Result<String, EzError> {
     let res = env::var(name);
@@ -145,16 +163,9 @@ mod tests {
     use super::*;
     #[test]
     fn test_online(){
-        let res = online(ServeOptions::default());
-        match res {
-            Ok(()) => {
-                println!("Online ok");
-            }
-            Err(err) => {
-                println!("服务上线失败: {}", err);
-            }
-        }
-        println!("Hello World!");
-        std::thread::sleep(std::time::Duration::from_secs(20));
+        let manager = ServiceManager::new(ServeOptions::default()).unwrap();
+        manager.online().unwrap();
+        sleep(std::time::Duration::from_secs(10));
+        manager.offline().unwrap();
     }
 }
