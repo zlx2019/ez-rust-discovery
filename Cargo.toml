@@ -1,0 +1,25 @@
+[package]
+name = "ez-discovery"
+version = "0.1.0"
+edition = "2024"
+authors = ["Zero<zero9501@outlook.com>"]
+description = "gRPC service discovery through Nacos"
+documentation = ""
+homepage = ""
+repository = ""
+readme = "README.md"
+license = "MIT"
+keywords = ["nacos", "discovery"]
+rust-version = "1.85"
+
+
+[dependencies]
+nacos-sdk = {version = "0.5", features = ["default"]}
+futures = "0.3"
+tracing = "0.1"
+
+[dev-dependencies]
+
+[features]
+default = []
+
