@@ -1,12 +1,11 @@
-use ez_discovery::{ServeOptions, ServiceManager};
+use ez_rust_discovery::{ServeOptions, ServiceManager};
 
 /// [NACOS_ADDR] Nacos server address
 /// [NACOS_NAMESPACE] Service namespace
 /// [SERVICE_ADDR] Worker service address
 /// [SERVICE_NAME] Worker service name
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // First initialize the log collector（if you need）
-    // TODO Start HTTP service or gRPC service...
+    // TODO Start gRPC or HTTP service.
 
     let manager = ServiceManager::new(ServeOptions::default())?;
     if let Err(e) = manager.online() {
@@ -14,8 +13,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     };
 
-    // Wait for graceful exit...
-    manager.offline()?;
-    Ok(())
+    std::thread::sleep(std::time::Duration::from_secs(30));
+    // TODO block Listen signal...
 
+    // Go offline before the gRPC or HTTP service shuts down
+    manager.offline()?;
+
+    // TODO Close gRPC or HTTP service.
+    Ok(())
 }

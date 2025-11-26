@@ -5,6 +5,7 @@ use std::net::{AddrParseError, SocketAddr};
 use std::sync::Arc;
 use futures::executor::block_on;
 use futures::TryFutureExt;
+use local_ip_address::local_ip;
 use nacos_sdk::api::constants;
 use nacos_sdk::api::naming::{NamingService, NamingServiceBuilder, ServiceInstance};
 use nacos_sdk::api::props::ClientProps;
@@ -17,6 +18,7 @@ pub enum EzError {
     IO(Error),
     Env(VarError, String),
     Parse(AddrParseError),
+    LocalIP(local_ip_address::Error),
     Other(String)
 }
 
@@ -26,6 +28,7 @@ impl std::fmt::Display for EzError {
             EzError::IO(err) => write!(f,"IO Error: {}", err),
             EzError::Env(err, name) => write!(f,"Read environment variables [{}] error: {}", name, err),
             EzError::Parse(err) => write!(f,"Parse error: {}", err),
+            EzError::LocalIP(err) => write!(f,"Local IP error: {}", err),
             EzError::Other(msg) => write!(f, "Other error: {}", msg),
         }
     }
@@ -37,6 +40,7 @@ impl std::error::Error for EzError {
             EzError::IO(err) => Some(err),
             EzError::Env(err, _) => Some(err),
             EzError::Parse(err) => Some(err),
+            EzError::LocalIP(err) => Some(err),
             _ => None,
         }
     }
@@ -54,11 +58,18 @@ impl From<AddrParseError> for EzError {
     }
 }
 
+impl From<local_ip_address::Error> for EzError {
+    fn from(value: local_ip_address::Error) -> Self {
+        EzError::LocalIP(value)
+    }
+}
+
 pub struct ServeOptions {
     pub addr: Option<String>,
     pub namespace: Option<String>,
     pub service_addr: Option<String>,
-    pub service_name: Option<String>
+    pub service_name: Option<String>,
+    pub service_host: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,22 +97,27 @@ impl ServiceManager {
             Some(service_name) => service_name,
             None => get_env("SERVICE_NAME")?
         };
+        let local_ip = local_ip()?.to_string();
+        let service_host = opt.service_host.unwrap_or_else(|| get_env("SERVICE_HOST").unwrap_or(local_ip));
         info!("[NACOS_ADDR]: {}", addr);
         info!("[NACOS_NAMESPACE]: {}", namespace);
         info!("[SERVICE_ADDR]: {}", service_addr);
         info!("[SERVICE_NAME]: {}", service_name);
+        info!("[SERVICE_HOST]: {}", service_host);
         let naming_service = NamingServiceBuilder::new(
             ClientProps::new().server_addr(addr).namespace(namespace))
             .build()
             .map_err(|e| {
                 EzError::Other(format!("NamingService create failed: {}", e))
             })?;
-        let (host, port) = match service_addr.split_once(":") {
+        let (_, port) = match service_addr.split_once(":") {
             Some(value) => value,
             None => return Err(EzError::Other("Invalid service address".to_string()))
         };
+
+
         let instance = ServiceInstance{
-            ip: host.to_string(),
+            ip: service_host,
             port: port.parse::<i32>().unwrap(),
             weight: 1.0,
             healthy: true,
@@ -138,6 +154,7 @@ impl Default for ServeOptions {
             namespace: None,
             service_addr: None,
             service_name: None,
+            service_host: None,
         }
     }
 }

@@ -1,12 +1,12 @@
 [package]
-name = "ez-discovery"
-version = "0.1.1"
+name = "ez-rust-discovery"
+version = "0.1.0"
 edition = "2024"
 authors = ["Zero<zero9501@outlook.com>"]
 description = "gRPC service discovery through Nacos"
-documentation = "https://github.com/zlx2019/ez-discovery/README.md"
-homepage = "https://github.com/zlx2019/ez-discovery"
-repository = "https://github.com/zlx2019/ez-discovery"
+documentation = "https://github.com/zlx2019/ez-rust-discovery/README.md"
+homepage = "https://github.com/zlx2019/ez-rust-discovery"
+repository = "https://github.com/zlx2019/ez-rust-discovery"
 readme = "README.md"
 license = "MIT"
 keywords = ["nacos", "discovery"]
@@ -17,6 +17,7 @@ rust-version = "1.85"
 nacos-sdk = {version = "0.5", features = ["default"]}
 futures = "0.3"
 tracing = "0.1"
+local-ip-address = "0.6.5"
 
 [dev-dependencies]
 
