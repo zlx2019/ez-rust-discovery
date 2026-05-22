@@ -1,7 +1,7 @@
 use std::{env, io::Error};
 use std::collections::HashMap;
 use std::env::VarError;
-use std::net::{AddrParseError, SocketAddr};
+use std::net::AddrParseError;
 use std::sync::Arc;
 use futures::executor::block_on;
 use futures::TryFutureExt;
@@ -92,7 +92,7 @@ impl ServiceManager {
             None => get_env("NACOS_NAMESPACE")?
         };
         let service_addr = parse_addr(match opt.service_addr {
-            Some(service_addr) => parse_addr(service_addr)?,
+            Some(service_addr) => service_addr,
             None => get_env("SERVICE_ADDR")?
         })?;
         let service_name = match opt.service_name {
@@ -191,11 +191,16 @@ fn get_env(name: &str) -> Result<String, EzError> {
     }
 }
 
+/// 校验地址格式为 `host:port`, host 允许为域名/主机名/IP, port 须为合法 u16
 fn parse_addr(addr: String) -> Result<String, EzError> {
-    match addr.parse::<SocketAddr>() {
-        Ok(_) => Ok(addr),
-        Err(err) => Err(EzError::Parse(err))
+    let (host, port) = addr.rsplit_once(':')
+        .ok_or_else(|| EzError::Other(format!("Invalid address (expect host:port): {}", addr)))?;
+    if host.is_empty() {
+        return Err(EzError::Other(format!("Invalid address: empty host in {}", addr)));
     }
+    port.parse::<u16>()
+        .map_err(|_| EzError::Other(format!("Invalid address: bad port in {}", addr)))?;
+    Ok(addr)
 }
 
 #[cfg(test)]
