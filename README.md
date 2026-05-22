@@ -26,11 +26,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ## Environment
-| Name                | Description          | Default value |
-| ------------------- | -------------------- | ------------- |
-| **NACOS_ADDR**      | Nacos server address |               |
-| **NACOS_NAMESPACE** | Service namespace    | public        |
-| **SERVICE_ADDR**    | Service address      |               |
-| **SERVICE_NAME**    | Service name         |               |
+| Name                | Description                                   | Default value |
+| ------------------- | --------------------------------------------- | ------------- |
+| **NACOS_ADDR**      | Nacos server address                          |               |
+| **NACOS_NAMESPACE** | Service namespace                             | public        |
+| **SERVICE_ADDR**    | Service address                               |               |
+| **SERVICE_NAME**    | Service name                                  |               |
+| **NACOS_USERNAME**  | Nacos auth username (optional, paired w/ pwd) |               |
+| **NACOS_PASSWORD**  | Nacos auth password (optional, paired w/ usr) |               |
+
+> `NACOS_USERNAME` and `NACOS_PASSWORD` must be provided together, or both omitted.
 
 

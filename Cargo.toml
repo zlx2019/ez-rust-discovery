@@ -1,6 +1,6 @@
 [package]
 name = "ez-rust-discovery"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 authors = ["Zero<zero9501@outlook.com>"]
 description = "gRPC service discovery through Nacos"
@@ -14,7 +14,7 @@ rust-version = "1.85"
 
 
 [dependencies]
-nacos-sdk = {version = "0.5", features = ["default"]}
+nacos-sdk = {version = "0.5", features = ["default", "auth-by-http"]}
 futures = "0.3"
 tracing = "0.1"
 local-ip-address = "0.6.5"

@@ -70,6 +70,8 @@ pub struct ServeOptions {
     pub service_addr: Option<String>,
     pub service_name: Option<String>,
     pub service_host: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -99,13 +101,33 @@ impl ServiceManager {
         };
         let local_ip = local_ip()?.to_string();
         let service_host = opt.service_host.unwrap_or_else(|| get_env("SERVICE_HOST").unwrap_or(local_ip));
+        // 读取鉴权信息: 优先用 opt, 否则回退环境变量; 二者必须同时提供或同时缺省
+        let username = opt.username.or_else(|| env::var("NACOS_USERNAME").ok());
+        let password = opt.password.or_else(|| env::var("NACOS_PASSWORD").ok());
+        let auth = match (username, password) {
+            (Some(u), Some(p)) => Some((u, p)),
+            (None, None) => None,
+            _ => return Err(EzError::Other(
+                "NACOS_USERNAME and NACOS_PASSWORD must be provided together".to_string(),
+            )),
+        };
         info!("[NACOS_ADDR]: {}", addr);
         info!("[NACOS_NAMESPACE]: {}", namespace);
         info!("[SERVICE_ADDR]: {}", service_addr);
         info!("[SERVICE_NAME]: {}", service_name);
         info!("[SERVICE_HOST]: {}", service_host);
-        let naming_service = NamingServiceBuilder::new(
-            ClientProps::new().server_addr(addr).namespace(namespace))
+        info!("[NACOS_AUTH]: {}", if auth.is_some() { "enabled" } else { "disabled" });
+        let mut client_props = ClientProps::new().server_addr(addr).namespace(namespace);
+        let auth_enabled = auth.is_some();
+        if let Some((u, p)) = auth {
+            client_props = client_props.auth_username(u).auth_password(p);
+        }
+        let mut builder = NamingServiceBuilder::new(client_props);
+        if auth_enabled {
+            // 启用 HTTP 鉴权插件, 否则用户名密码不会被实际使用
+            builder = builder.enable_auth_plugin_http();
+        }
+        let naming_service = builder
             .build()
             .map_err(|e| {
                 EzError::Other(format!("NamingService create failed: {}", e))
@@ -155,6 +177,8 @@ impl Default for ServeOptions {
             service_addr: None,
             service_name: None,
             service_host: None,
+            username: None,
+            password: None,
         }
     }
 }
