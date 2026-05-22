@@ -1,24 +1,45 @@
-use ez_rust_discovery::{ServeOptions, ServiceManager};
+#![allow(missing_docs)]
 
-/// [NACOS_ADDR] Nacos server address
-/// [NACOS_NAMESPACE] Service namespace
-/// [SERVICE_ADDR] Worker service address
-/// [SERVICE_NAME] Worker service name
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // TODO Start gRPC or HTTP service.
+// Minimal runnable example: register on startup, deregister on Ctrl+C.
+//
+// Set the following environment variables before running:
+//
+//     export NACOS_ADDR=127.0.0.1:8848
+//     export NACOS_NAMESPACE=public
+//     export SERVICE_ADDR=0.0.0.0:9000
+//     export SERVICE_NAME=demo-grpc
+//     # optional:
+//     # export NACOS_USERNAME=nacos
+//     # export NACOS_PASSWORD=nacos
+//     # export SERVICE_HOST=10.0.0.1
+//
+// Then:
+//
+//     cargo run --example grpc_service
 
-    let manager = ServiceManager::new(ServeOptions::default())?;
-    if let Err(e) = manager.online() {
-        println!("online fail, caused by: {}", e);
-        std::process::exit(1);
-    };
+use ez_rust_discovery::{ServiceConfig, ServiceManager};
 
-    std::thread::sleep(std::time::Duration::from_secs(30));
-    // TODO block Listen signal...
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
+        .init();
 
-    // Go offline before the gRPC or HTTP service shuts down
-    manager.offline()?;
+    // 1. Load configuration from the environment (or use the builder).
+    let config = ServiceConfig::from_env()?;
 
-    // TODO Close gRPC or HTTP service.
+    // 2. Build the manager and register the instance.
+    let manager = ServiceManager::new(config).await?;
+    manager.register().await?;
+
+    // 3. TODO: start your gRPC / HTTP server here.
+
+    // 4. Block until a termination signal arrives.
+    tokio::signal::ctrl_c().await?;
+
+    // 5. Gracefully deregister.
+    manager.deregister().await?;
     Ok(())
 }

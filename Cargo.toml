@@ -1,26 +1,42 @@
 [package]
 name = "ez-rust-discovery"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2024"
-authors = ["Zero<zero9501@outlook.com>"]
-description = "gRPC service discovery through Nacos"
-documentation = "https://github.com/zlx2019/ez-rust-discovery/README.md"
+authors = ["Zero <zero9501@outlook.com>"]
+description = "Ergonomic service discovery client for Nacos, optimized for gRPC/HTTP workloads."
+documentation = "https://docs.rs/ez-rust-discovery"
 homepage = "https://github.com/zlx2019/ez-rust-discovery"
 repository = "https://github.com/zlx2019/ez-rust-discovery"
 readme = "README.md"
 license = "MIT"
-keywords = ["nacos", "discovery"]
+keywords = ["nacos", "discovery", "grpc", "microservice", "registry"]
+categories = ["network-programming", "asynchronous"]
 rust-version = "1.85"
 
-
 [dependencies]
-nacos-sdk = {version = "0.5", features = ["default", "auth-by-http"]}
-futures = "0.3"
+nacos-sdk = { version = "0.8.0", default-features = false, features = ["default", "auth-by-http"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 tracing = "0.1"
-local-ip-address = "0.6.5"
+thiserror = "2"
+local-ip-address = "0.6"
 
 [dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 default = []
 
+[[example]]
+name = "grpc_service"
+path = "examples/grpc_service.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+todo = "warn"
+dbg_macro = "warn"

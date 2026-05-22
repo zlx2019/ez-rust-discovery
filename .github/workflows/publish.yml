@@ -2,72 +2,47 @@ name: Publish crate to crates.io
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'Cargo.toml'
+    tags:
+      - 'v*'
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   publish:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 'stable'
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      # Check if the version number already exists
-      - name: Check if version exists
-        id: version_check
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # Ensure the git tag matches the version in Cargo.toml (e.g. tag `v0.2.0` ↔ version `0.2.0`).
+      - name: Verify tag matches Cargo.toml version
         run: |
-          PACKAGE_NAME=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
-          PACKAGE_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          echo "Package: $PACKAGE_NAME"
-          echo "Version: $PACKAGE_VERSION"
-          
-          if cargo search $PACKAGE_NAME | grep -q "^$PACKAGE_NAME = \"$PACKAGE_VERSION\""; then
-            echo "Version $PACKAGE_VERSION already exists on crates.io"
-            echo "should_publish=false" >> $GITHUB_OUTPUT
-          else
-            echo "Version $PACKAGE_VERSION is new"
-            echo "should_publish=true" >> $GITHUB_OUTPUT
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CRATE_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          echo "Tag version:   $TAG_VERSION"
+          echo "Crate version: $CRATE_VERSION"
+          if [ "$TAG_VERSION" != "$CRATE_VERSION" ]; then
+            echo "::error::Tag ($TAG_VERSION) does not match Cargo.toml version ($CRATE_VERSION)"
+            exit 1
           fi
 
-      # Publish crate
       - name: Publish crate
-        if: steps.version_check.outputs.should_publish == 'true'
         env:
-          CARGO_REGISTRY_TOKEN: ${{secrets.CRATES_IO_TOKEN}}
-        run: cargo publish --token ${{secrets.CRATES_IO_TOKEN}}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo publish --token "$CARGO_REGISTRY_TOKEN"
 
-      # Generate Tag
-      - name: Create Git tag
-        if: steps.version_check.outputs.should_publish == 'true'
-        run: |
-          PACKAGE_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          git config user.name Zero
-          git config user.email 1143967454@qq.com
-          git tag -a "v$PACKAGE_VERSION" -m "Release v$PACKAGE_VERSION"
-          git push origin "v$PACKAGE_VERSION"
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
